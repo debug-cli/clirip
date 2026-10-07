@@ -1,12 +1,20 @@
 import { realpathSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
+import { render } from 'ink';
+
+import { App, formatExit } from './app';
+import { fake } from './engines/fake';
+import { recordError } from './lib/error-log';
 import { parseArgs } from './lib/parse-args';
 
 export type { CliArgs } from './lib/parse-args';
 
 export const ALTERNATE_SCREEN_ENTER = '\x1b[?1049h\x1b[?25l';
 export const ALTERNATE_SCREEN_EXIT = '\x1b[?1049l\x1b[?25h';
+
+export const CLIRIP_DIR = `${homedir()}/.clirip`;
 
 // Enters the alternate screen and hides the cursor, and returns the one teardown
 // that undoes both. The guard makes the teardown idempotent so every exit path can
@@ -23,12 +31,20 @@ export function setupTerminal(): () => void {
 }
 
 export async function main(argv: string[]): Promise<number> {
+  let args;
   try {
-    parseArgs(argv);
+    args = parseArgs(argv);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`${message}\n`);
     return 2;
+  }
+
+  // Ink throws when it cannot put the terminal in raw mode, so a piped run is told
+  // what is wrong instead of being handed a stack trace.
+  if (process.stdin.isTTY !== true) {
+    process.stderr.write('clirip needs an interactive terminal. Run it in a terminal, not through a pipe.\n');
+    return 1;
   }
 
   const teardown = setupTerminal();
@@ -43,8 +59,32 @@ export async function main(argv: string[]): Promise<number> {
   process.on('uncaughtException', () => quit(1));
   process.on('unhandledRejection', () => quit(1));
 
-  // T10 renders the app here. Until then the entry proves the lifecycle and leaves.
+  let saved: string[] = [];
+
+  const instance = render(
+    <App
+      engine={fake}
+      args={args}
+      onPaths={(paths) => {
+        saved = paths;
+      }}
+      onError={(cause) => {
+        try {
+          recordError(cause, CLIRIP_DIR);
+        } catch {
+          // A failed log write must never replace the message the user already has.
+        }
+      }}
+    />,
+  );
+
+  await instance.waitUntilExit();
   teardown();
+
+  if (saved.length > 0) {
+    process.stdout.write(`${formatExit(saved)}\n`);
+  }
+
   return 0;
 }
 

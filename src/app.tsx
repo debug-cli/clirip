@@ -2,7 +2,7 @@ import { homedir } from 'node:os';
 
 import { Box, Text, useApp, useInput } from 'ink';
 import TextInput from 'ink-text-input';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { WORDMARK } from './lib/logo';
 import type { CliArgs } from './lib/parse-args';
@@ -39,6 +39,11 @@ export function nextStatus(status: Status, event: string, args: CliArgs): Status
   return transitions[status][event];
 }
 
+// One saved path per line, the shape SPEC section 3 prints on exit.
+export function formatExit(paths: string[]): string {
+  return paths.join('\n');
+}
+
 const BAR_WIDTH = 24;
 
 export function progressBar(percent: number): string {
@@ -59,7 +64,16 @@ function failureMessage(cause: unknown, engine: Engine): string {
   return `${engine.id} could not finish that request.`;
 }
 
-export function App({ engine, args }: { engine: Engine; args: CliArgs }) {
+type AppProps = {
+  engine: Engine;
+  args: CliArgs;
+  // The exit print and the raw error log live at the process boundary, so the app
+  // reports outward instead of touching stdout or ~/.clirip itself.
+  onPaths?: (paths: string[]) => void;
+  onError?: (cause: unknown) => void;
+};
+
+export function App({ engine, args, onPaths, onError }: AppProps) {
   const { exit } = useApp();
 
   const [status, setStatus] = useState<Status>(args.history === true ? 'history' : 'input');
@@ -70,6 +84,11 @@ export function App({ engine, args }: { engine: Engine; args: CliArgs }) {
   const [progress, setProgress] = useState<Progress>({ percent: 0 });
   const [paths, setPaths] = useState<string[]>([]);
   const [message, setMessage] = useState('');
+
+  // Held in a ref so an inline callback from the caller cannot restart the download
+  // effect on every render.
+  const callbacks = useRef({ onPaths, onError });
+  callbacks.current = { onPaths, onError };
 
   const tokens = themes[resolveTheme(themeName, isDarkTerminal())];
   const outDir = args.output ?? `${homedir()}/Downloads`;
@@ -91,6 +110,7 @@ export function App({ engine, args }: { engine: Engine; args: CliArgs }) {
       },
       (cause: unknown) => {
         setMessage(failureMessage(cause, engine));
+        callbacks.current.onError?.(cause);
         setStatus('error');
       },
     );
@@ -107,10 +127,12 @@ export function App({ engine, args }: { engine: Engine; args: CliArgs }) {
     engine.download(url, chosen, outDir, setProgress, controller.signal).then(
       (result) => {
         setPaths(result.paths);
+        callbacks.current.onPaths?.(result.paths);
         setStatus('done');
       },
       (cause: unknown) => {
         setMessage(failureMessage(cause, engine));
+        callbacks.current.onError?.(cause);
         setStatus('error');
       },
     );

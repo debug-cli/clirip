@@ -78,10 +78,19 @@ describe('main exit codes', () => {
     expect(stderr.join('')).toContain('Usage: clirip');
   });
 
-  it('returns 0 on a clean run', async () => {
+  // T11 added the terminal guard: a real terminal is required before Ink can put
+  // stdin in raw mode, so a valid argument set now stops at the guard (1) instead
+  // of completing (0), while bad arguments still stop earlier at usage (2).
+  it('accepts valid arguments and stops at the terminal guard', async () => {
     captureStdout();
+    const stderr: string[] = [];
+    vi.spyOn(process.stderr, 'write').mockImplementation((chunk: unknown) => {
+      stderr.push(String(chunk));
+      return true;
+    });
 
-    await expect(main([])).resolves.toBe(0);
+    await expect(main(['https://x.test', '--theme', 'dark'])).resolves.toBe(1);
+    expect(stderr.join('')).toContain('interactive terminal');
   });
 });
 
