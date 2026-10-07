@@ -30,6 +30,9 @@ Format: `Ruling: <decision> | <why> | <cost if wrong>`
 | Date | Ruling |
 |---|---|
 | 2026-10-06 | Ruling: drop `--no-watermark` for cobalt, keep it for other engines \| the current cobalt schema has no watermark field \| a dead flag that does nothing when passed |
+| 2026-10-06 | Ruling: T02 creates `src/cli.tsx` and `src/types.ts` as dependency-free stubs \| the tsup entry `src/cli.tsx` cannot resolve on an empty tree, so T02's own gate (`typecheck && test && build`) cannot pass without one, and T02 already pre-authorizes pulling T05's stub forward \| T05 and T08 replace both files; a stale stub would ship an empty binary |
+| 2026-10-06 | Ruling: T02 runs `npm install` itself so its own gate can execute; T03 verifies the pins and records the resolved versions \| T02's Verify line requires typecheck, test and build, none of which run without installed tooling \| the lockfile would go unrecorded if T03's evidence step is dropped |
+| 2026-10-06 | Ruling: T01's ignore check runs as the literal `git check-ignore -v` command instead of `test/ignore.test.ts` \| T01 forbids editing any file outside its `Files:` list and vitest does not exist until T02/T03, so the vitest form of the same two assertions lands with T02 and T01 proves the rule by command \| the ignore rule goes unwatched by `npm test` for exactly one task |
 | 2026-10-06 | Ruling: the status line key hints read exactly `T theme ? keys / filter`, single spaces, no middle dots, `/` kept as the glyph \| DESIGN.md describes that field as "slash filter" while D01's interface snippet writes `/ filter`, and D01's prose then bans the middle dots its own snippet contains, so the block contradicts itself; SPEC 7.1 names the keys as `T`, `/` and `?` \| D01's check script asserts one literal string, and if the two sides disagree the shipped status line contradicts the keys overlay D02 builds |
 
 ## Task log
@@ -38,4 +41,4 @@ Format: `task id | commit hash | result`
 
 | Task | Commit | Result |
 |---|---|---|
-| | | |
+| T01 | 7c7e3cb | PASS. `git init -b main` created the repo. `git check-ignore -v cli-rip_enhanced-prompt-v1.md .freebuff` printed `.gitignore:10` and `.gitignore:9` respectively, exit 0. `git status --short` and `git ls-files` list neither protected path. AC-15 first half passes. |
