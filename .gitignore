@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+*.log
+.env
+.env.*
+.DS_Store
+.freebuff
+cli-rip_enhanced-prompt-v1.md
